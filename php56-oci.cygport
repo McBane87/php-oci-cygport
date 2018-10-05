@@ -1,0 +1,210 @@
+#inherit httpd
+
+# PHP's Version
+PHP_VERSION=$(php-config --version)
+[ "$PHP_VERSION" == "" ] && PHP_VERSION=5.6.0
+PHP_V=${PHP_VERSION%.*}
+PHP_V=${PHP_V//.}
+
+# PHP's Prefix
+prefix=$(php-config --prefix)
+[ "$prefix" == "" ] && prefix=/usr
+
+# PHP's libdir (where -lphp5 is)
+ld_libdir=$(find ${prefix} -name "libphp5.dll.a" -o -name "libphp5.a"| xargs -n1 dirname | head -1)
+[ "$ld_libdir" == "" ] && ld_libdir=/usr/lib
+
+# PHP's extensiondir
+extensiondir=$(php-config --extension-dir)
+
+# PHP's ConfScanDir
+if [ $(php-config --configure-options | grep -- "--with-config-file-scan-dir" >/dev/null 2>&1)$? -eq 0 ]; then
+	confscandir=$(php-config --configure-options | sed -- 's/^.*--with-config-file-scan-dir=\([^ ]*\).*$/\1/g')
+else
+	confscandir=/etc/php.d
+fi
+
+# PHP's other Paths
+declare path_ids=(sysconfdir libdir datadir bindir sbindir docdir includedir oldincludedir datarootdir mandir)
+declare extra_paths=""
+for i in "${path_ids[@]}"; do
+	if [ $(php-config --$(echo $i | sed 's/dir$/-dir/g') | sed '/^\s*$/d' | wc -l) -eq 1 ]; then
+		declare extra_paths+=" --$i=$(php-config --$(echo $i | sed 's/dir$/-dir/g'))"
+	else
+		if [ $(php-config --configure-options | grep -- "--$i" >/dev/null 2>&1)$? -eq 0 ]; then
+			declare extra_paths+=" $(php-config --configure-options | sed -- "s/^.*\(--$i=[^ ]*\).*$/\1/g")"
+		fi
+	fi
+done
+
+NAME="php"
+PNAME="oci"
+VERSION=5.6.38
+RELEASE=1
+CATEGORY="PHP"
+SUMMARY="PHP OCI Extension"
+DESCRIPTION=""
+HOMEPAGE="http://www.php.net/"
+SRC_URI="https://fossies.org/linux/www/php-${VERSION}.tar.xz"
+SRC_URI+=" template-ext.reg"
+PATCH_URI="
+	5.3.4-cygwin-build.patch
+	5.3.6-gcc-visibility.patch
+	5.4.19-posix-ttyname_r.patch
+	5.6.6-fix-libtoolize.patch
+	5.4.20-configure-implicit-decls.patch
+	php-5.6.38-cygwin-oci.patch
+"
+
+DIFF_EXCLUDES="aclocal.m4 configure generated_lists libtool.m4 lt*.m4 ltmain.sh php_config.h.in php_version.h tests"
+KEEP_LA_FILES="none"
+RESTRICT="debuginfo diff postinst-doc postinst-gconf postinst-info upload"
+
+# packaging
+#
+PKG_NAMES="php${PHP_V%%.*}_${PNAME}"
+declare php${PHP_V%%.*}_${PNAME}_CONTENTS="${confscandir#/}/oci8.ini 
+		${confscandir#/}/pdo_oci.ini
+		${prefix#/}/lib/php/*/oci8.dll
+		${prefix#/}/lib/php/*/pdo_oci.dll
+		${prefix#/}/share/pear/doc/oci8/
+		${prefix#/}/share/pear/doc/pdo_oci/
+		${prefix#/}/share/pear/.registry/.channel.*/oci8.reg
+		${prefix#/}/share/pear/.registry/.channel.*/pdo_oci.reg"
+declare php${PHP_V%%.*}_${PNAME}_SUMMARY="PHP ${PNAME} extension"
+
+src_compile() {
+	cd ${S}	
+	
+	#
+	# autotoolize
+	#
+	rm -f build/libtool.m4
+	libtoolize --copy --force || error "libtoolize failed"
+	cat /usr/share/aclocal/libtool.m4 /usr/share/aclocal/lt{options,sugar,version,~obsolete}.m4 > build/libtool.m4
+	
+	cygmake -j1 -B -f build/build.mk ZENDDIR="Zend"
+	gnuconfigize .
+	
+	# Hack to work around configure adding to hard-coded include_path
+	# only when bundled PEAR is enabled (we package it separately)
+	export PEAR_INSTALLDIR=${prefix}/share/pear
+	
+	#
+	# Orcale EXTENSIONS
+	#
+	
+	if [ "${ORACLE_HOME}" != "" ] || [ "${ORACLE_INSTC}" != "" ]; then
+		if [ "${ORACLE_VERSION}" != "" ]; then
+			
+			# Workaround the make paths with spaces work
+			[ -L ${T}/ORACLE_HOME ] && rm -f ${T}/ORACLE_HOME
+			[ -L ${T}/ORACLE_INSTC ] && rm -f ${T}/ORACLE_INSTC
+			[ "${ORACLE_HOME}" != "" ] && ln -s "${ORACLE_HOME}" ${T}/ORACLE_HOME
+			[ "${ORACLE_INSTC}" != "" ] && ln -s "${ORACLE_INSTC}" ${T}/ORACLE_INSTC
+			
+			# Workaround to make the linker find the libraries.
+			# They need to be named libxyz.dll
+			[ -L ${T}/ORACLE_INSTC/liboci.dll ] && rm -f  ${T}/ORACLE_INSTC/liboci.dll
+			[ -f ${T}/ORACLE_INSTC/oci.dll ] && ln -s oci.dll ${T}/ORACLE_INSTC/liboci.dll
+			[ -L ${T}/ORACLE_HOME/lib/liboci.dll ] && rm -f  ${T}/ORACLE_HOME/lib/liboci.dll
+			[ -f ${T}/ORACLE_HOME/lib/oci.dll ] && ln -s oci.dll ${T}/ORACLE_HOME/lib/liboci.dll
+			
+			
+			ORACLE_PATH="${T}/ORACLE_INSTC"; [ "${ORACLE_HOME}" != "" ] && ORACLE_PATH="${T}/ORACLE_HOME"
+			ORACLE_CFG="instantclient,${ORACLE_PATH}"; [ "${ORACLE_HOME}" != "" ] && ORACLE_CFG="${ORACLE_PATH}"
+			
+			#
+			# OCI can't be build together with other extensions, 
+			# because php fails if LDAP and OCI are enabled together.
+			#
+			mkdir -p ${B}/oci
+			cd ${B}/oci
+			CYGCONF_SOURCE="${S}" cygconf --cache-file=../config.cache \
+				EXTENSION_DIR=${extensiondir} \
+				--with-config-file-scan-dir=${confscandir} \
+				--prefix=${prefix} \
+				--exec-prefix=${prefix} ${extra_paths} \
+				--disable-static --disable-rpath \
+				--disable-all --without-pear \
+				--disable-cli --disable-cgi \
+				--disable-fpm \
+				--enable-embed --enable-pdo \
+				--with-oci8=shared,"${ORACLE_CFG}" \
+				--with-pdo-oci=shared,"${ORACLE_CFG},${ORACLE_VERSION}" \
+				ac_cv_func_ttyname_r_works=yes
+		
+			cygmake build-modules \
+				PHP_GLOBAL_OBJS='' \
+				EXTRA_LDFLAGS="-L${ld_libdir}"
+		
+		else
+			echo "Please create ORACLE_VERSION environment variable."
+			echo "(Version always need to end with x.1 even if it is an x.2 version!)"
+		fi
+	else
+		echo "Please create ORACLE_HOME or ORACLE_INSTC environment variable"
+	fi
+}
+
+src_test() {
+	cd ${B}/oci
+	cygmake -j1 test
+}
+
+src_install() {
+	local x xdir
+
+	cd ${B}/oci
+	cygmake -j1 install-modules INSTALL_ROOT=${D} INSTALL_IT=
+	
+	mkdir -p ${D}/${confscandir}
+	keepdir ${confscandir}
+	
+	local regdir=${prefix}/share/pear/.registry/.channel.pecl.php.net
+	local xdir=$(php-config --extension-dir)
+	local dll ext docdir path_len summary_len p
+	
+	dodir ${regdir}
+	
+	for x in ${D}${xdir}/*.dll
+	do
+		dll=${x##*/}
+		ext=${dll%.dll}
+		docdir=${prefix}/share/pear/doc/${ext}
+		doc_len=$((${#docdir} + 8))	# /CREDITS
+		path_len=$((${#xdir} + ${#dll} + 1))
+		summary_len=$((${#ext} + 14))	# PHP ___ extension
+
+		# create .ini file for automatic extension loading
+		if $(${OBJDUMP} -p ${x} | grep -q zend_startup_module)
+		then
+			echo "zend_extension = ${xdir}/${dll}" >> ${D}${confscandir}/${ext}.ini
+		else
+			echo "extension = ${dll}" >> ${D}${confscandir}/${ext}.ini
+		fi
+
+		# register extension with pecl to prevent accidental
+		# installation of obsolete versions
+		insinto ${docdir}
+		touch ${S}/CREDITS
+		doins ${S}/CREDITS
+
+		sed -e "s,@DATE@,${date},g;
+			s,@DOCDIR@,${docdir},g;
+			s,@DOC_LEN@,${doc_len},g;
+			s,@DLL@,${dll},g;
+			s,@DLL_LEN@,${#dll},g;
+			s,@EXT@,${ext},g;
+			s,@EXT_LEN@,${#ext},g;
+			s,@PATH@,${xdir}/${dll},g;
+			s,@PATH_LEN@,${path_len},g;
+			s,@SUMMARY_LEN@,${summary_len},g;
+			s,@TIME@,${time},g;
+			s,@VERSION@,${VERSION},g;
+			s,@VERSION_LEN@,${#VERSION},g;
+			s,@TIMESTAMP@,${timestamp}," \
+			${S}/template-ext.reg > ${D}${regdir}/${ext}.reg
+	done
+		
+}
