@@ -1,0 +1,197 @@
+--- origsrc/php-7.3.5/ext/pdo_oci/config.m4	2019-04-30 10:37:19.000000000 +0200
++++ src/php-7.3.5/ext/pdo_oci/config.m4	2019-05-06 09:44:21.698686800 +0200
+@@ -14,18 +14,26 @@
+     PHP_PDO_OCI_TAIL1="tail -1"
+ fi
+ 
++if test -z "$PERL"; then
++  PHP_OCI_PERL="perl";
++else
++  PHP_OCI_PERL="$PERL";
++fi
++
++SHLIB_OCI_SUFFIX=dll
++
+ AC_DEFUN([AC_PDO_OCI_VERSION],[
+   AC_MSG_CHECKING([Oracle version])
+-  PDO_OCI_LCS_BASE=$PDO_OCI_LIB_DIR/libclntsh.$SHLIB_SUFFIX_NAME
+-  PDO_OCI_LCS=`ls $PDO_OCI_LCS_BASE.*.1 2> /dev/null | $PHP_PDO_OCI_TAIL1`  # Oracle 10g, 11g, 12c etc
++  PDO_OCI_LCS_BASE=$PDO_OCI_LIB_DIR/orannzsbb
++  PDO_OCI_LCS=`ls ${PDO_OCI_LCS_BASE}*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_PDO_OCI_TAIL1 | $PHP_OCI_PERL -ne "/.*?(\d{2}).$SHLIB_OCI_SUFFIX/ and print"` # Oracle 10g, 11g, 12c etc
+   if test -f "$PDO_OCI_LCS"; then
+     dnl Oracle 10g, 11g 12c etc.  The x.2 version libraries are named x.1 for drop in compatibility
+-    PDO_OCI_VERSION=`echo $PDO_OCI_LCS | $PHP_PDO_OCI_SED -e 's/.*\.\(.*\)\.1$/\1.1/'`
+-  elif test -f $PDO_OCI_LCS_BASE.9.0; then
++    PDO_OCI_VERSION=`echo $PDO_OCI_LCS | $PHP_OCI_PERL -pe "s/.*?(\d+).$SHLIB_OCI_SUFFIX$/\1.1/"`
++  elif test -f ${PDO_OCI_LCS_BASE}9.${SHLIB_OCI_SUFFIX}; then
+     dnl There is no case for Oracle 9.2. Oracle 9.2 libraries have a 9.0 suffix for drop-in compatibility with Oracle 9.0
+     PDO_OCI_VERSION=9.0
+   else
+-    AC_MSG_ERROR(Oracle libclntsh.$SHLIB_SUFFIX_NAME client library not found or its version is lower than 9)
++    AC_MSG_ERROR(Oracle orannzsbb.$SHLIB_OCI_SUFFIX client library not found or its version is lower than 9)
+   fi
+   AC_MSG_RESULT($PDO_OCI_VERSION)
+ ])
+@@ -151,17 +159,17 @@
+       ;;
+   esac
+ 
+-  PHP_ADD_LIBRARY(clntsh, 1, PDO_OCI_SHARED_LIBADD)
++  PHP_ADD_LIBRARY(oci, 1, PDO_OCI_SHARED_LIBADD)
+   PHP_ADD_LIBPATH($PDO_OCI_LIB_DIR, PDO_OCI_SHARED_LIBADD)
+ 
+-  PHP_CHECK_LIBRARY(clntsh, OCIEnvCreate,
++  PHP_CHECK_LIBRARY(oci, OCIEnvCreate,
+   [
+     AC_DEFINE(HAVE_OCIENVCREATE,1,[ ])
+   ], [], [
+     -L$PDO_OCI_LIB_DIR $PDO_OCI_SHARED_LIBADD
+   ])
+ 
+-  PHP_CHECK_LIBRARY(clntsh, OCIEnvNlsCreate,
++  PHP_CHECK_LIBRARY(oci, OCIEnvNlsCreate,
+   [
+     AC_DEFINE(HAVE_OCIENVNLSCREATE,1,[ ])
+   ], [], [
+@@ -171,7 +179,7 @@
+   dnl
+   dnl Check if we need to add -locijdbc8
+   dnl
+-  PHP_CHECK_LIBRARY(clntsh, OCILobIsTemporary,
++  PHP_CHECK_LIBRARY(oci, OCILobIsTemporary,
+   [
+     AC_DEFINE(HAVE_OCILOBISTEMPORARY,1,[ ])
+   ], [
+@@ -189,7 +197,7 @@
+   dnl
+   dnl Check if we have collections
+   dnl
+-  PHP_CHECK_LIBRARY(clntsh, OCICollAssign,
++  PHP_CHECK_LIBRARY(oci, OCICollAssign,
+   [
+     AC_DEFINE(HAVE_OCICOLLASSIGN,1,[ ])
+   ], [], [
+@@ -197,7 +205,7 @@
+   ])
+ 
+   dnl Scrollable cursors?
+-  PHP_CHECK_LIBRARY(clntsh, OCIStmtFetch2,
++  PHP_CHECK_LIBRARY(oci, OCIStmtFetch2,
+   [
+      AC_DEFINE(HAVE_OCISTMTFETCH2,1,[ ])
+   ], [], [
+--- origsrc/php-7.3.5/ext/oci8/config.m4	2019-04-30 10:37:24.000000000 +0200
++++ src/php-7.3.5/ext/oci8/config.m4	2019-05-06 09:44:25.949018900 +0200
+@@ -11,6 +11,14 @@
+     PHP_OCI8_TAIL1="tail -1"
+ fi
+ 
++if test -z "$PERL"; then
++  PHP_OCI8_PERL="perl";
++else
++  PHP_OCI8_PERL="$PERL";
++fi
++
++SHLIB_OCI_SUFFIX=dll
++
+ AC_DEFUN([AC_OCI8_CHECK_LIB_DIR],[
+   AC_MSG_CHECKING([ORACLE_HOME library validity])
+   if test ! -d "$OCI8_DIR"; then
+@@ -24,7 +32,8 @@
+     OCI8_LIB_DIR=$PHP_OCI8_OH_LIBDIR
+   else
+     dnl This isn't an ORACLE_HOME.  Try heuristic examination of the dir to help the user
+-    if test -f "$OCI8_DIR/libociei.$SHLIB_SUFFIX_NAME"; then
++	OH_LIB=`ls --color=never $OCI8_DIR/oraociei*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_OCI8_TAIL1`
++    if test -f "$OH_LIB"; then
+       AC_MSG_ERROR([Expected an ORACLE_HOME top level directory but ${OCI8_DIR} appears to be an Instant Client directory. Try --with-oci8=instantclient,${OCI8_DIR}])
+     else
+       AC_MSG_ERROR([Oracle library directory not found in ${OCI8_DIR}])
+@@ -35,45 +44,43 @@
+ 
+ AC_DEFUN([AC_OCI8IC_VERSION],[
+   AC_MSG_CHECKING([Oracle Instant Client library version compatibility])
+-  OCI8_LCS_BASE=$PHP_OCI8_INSTANT_CLIENT/libclntsh.$SHLIB_SUFFIX_NAME
+-  OCI8_LCS=`ls $OCI8_LCS_BASE.*.1 2> /dev/null | $PHP_OCI8_TAIL1`  # Oracle 10g, 11g etc
+-  OCI8_NNZ=`ls $PHP_OCI8_INSTANT_CLIENT/libnnz*.$SHLIB_SUFFIX_NAME 2> /dev/null | $PHP_OCI8_TAIL1`
++  OCI8_LCS="$PHP_OCI8_INSTANT_CLIENT/oci.$SHLIB_OCI_SUFFIX"
++  OCI8_NNZ_BASE=`ls --color=never "$PHP_OCI8_INSTANT_CLIENT/"orannzsbb*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_OCI8_PERL -pe "s/\d+\.$SHLIB_OCI_SUFFIX$//g" | $PHP_OCI8_TAIL1`
++  OCI8_NNZ=`ls --color=never "${OCI8_NNZ_BASE}"1*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_OCI8_TAIL1`  # Oracle 10g, 11g etc
+   if test -f "$OCI8_NNZ" && test -f "$OCI8_LCS"; then
+-    if test ! -f "$OCI8_LCS_BASE"; then
+-      AC_MSG_ERROR([Link from $OCI8_LCS_BASE to $OCI8_LCS_BASE.*.1 not found])
+-    fi
+-    OCI8_ORACLE_VERSION=`echo $OCI8_LCS | $PHP_OCI8_SED -e 's/.*\.\(.*\)\.1$/\1.1/'`
++    OCI8_ORACLE_VERSION=`echo $OCI8_NNZ | $PHP_OCI8_PERL -pe "s/.*?(\d+).$SHLIB_OCI_SUFFIX$/\1.1/"`
+   else
+-    AC_MSG_ERROR([Oracle Instant Client libraries libnnz.$SHLIB_SUFFIX_NAME and libclntsh.$SHLIB_SUFFIX_NAME not found])
++    AC_MSG_ERROR([Oracle Instant Client libraries orannzsbb*.$SHLIB_OCI_SUFFIX and oci.$SHLIB_OCI_SUFFIX not found])
+   fi
+   AC_MSG_RESULT([$OCI8_ORACLE_VERSION])
+ ])
+ 
+ AC_DEFUN([AC_OCI8_ORACLE_VERSION],[
+   AC_MSG_CHECKING([Oracle library version compatibility])
+-  OCI8_LCS_BASE=$OCI8_DIR/$OCI8_LIB_DIR/libclntsh.$SHLIB_SUFFIX_NAME
+-  OCI8_LCS=`ls $OCI8_LCS_BASE.*.1 2> /dev/null | $PHP_OCI8_TAIL1`  # Oracle 10g, 11g etc
++  OCI8_NNZ_BASE=`ls --color=never "$PHP_OCI8_INSTANT_CLIENT/"orannzsbb*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_OCI8_PERL -pe "s/\d+\.$SHLIB_OCI_SUFFIX$//g" | $PHP_OCI8_TAIL1`
++  OCI8_NNZ_FBASE=`echo $OCI8_NNZ_BASE | $PHP_OCI8_SED "s/\.$SHLIB_OCI_SUFFIX.*$//g"`
++  OCI8_NNZ=`ls --color=never "${OCI8_NNZ_BASE}"1*.$SHLIB_OCI_SUFFIX 2> /dev/null | $PHP_OCI8_TAIL1`  # Oracle 10g, 11g etc
+   if test -s "$OCI8_DIR/orainst/unix.rgs"; then
+     OCI8_ORACLE_VERSION=`grep '"ocommon"' $OCI8_DIR/orainst/unix.rgs | $PHP_OCI8_SED 's/[ ][ ]*/:/g' | cut -d: -f 6 | cut -c 2-4`
+     test -z "$OCI8_ORACLE_VERSION" && OCI8_ORACLE_VERSION=7.3
+-  elif test -f "$OCI8_LCS"; then
++  elif test -f "$OCI8_NNZ"; then
+     dnl Oracle 10g, 11g etc.  The x.2 version libraries are named x.1 for drop in compatibility
+-    OCI8_ORACLE_VERSION=`echo $OCI8_LCS | $PHP_OCI8_SED -e 's/.*\.\(.*\)\.1$/\1.1/'`
+-  elif test -f $OCI8_LCS_BASE.9.0; then
++    OCI8_ORACLE_VERSION=`echo $OCI8_NZZ | $PHP_OCI8_PERL -pe "s/.*?(\d+).$SHLIB_OCI_SUFFIX$/\1.1/"`
++  elif test -f "${OCI8_NNZ_FBASE}"9.$SHLIB_OCI_SUFFIX; then
+     dnl There is no case for Oracle 9.2. Oracle 9.2 libraries have a 9.0 suffix for drop-in compatibility with Oracle 9.0
+     OCI8_ORACLE_VERSION=9.0
+-  elif test -f $OCI8_LCS_BASE.8.0; then
++  elif test -f "${OCI8_NNZ_BASE}"8.$SHLIB_OCI_SUFFIX; then
+     OCI8_ORACLE_VERSION=8.1
+-  elif test -f $OCI8_LCS_BASE.1.0; then
++  elif test -f "${OCI8_NNZ_BASE}"1.$SHLIB_OCI_SUFFIX; then
+     OCI8_ORACLE_VERSION=8.0
+-  elif test -f $OCI8_DIR/$OCI8_LIB_DIR/libclntsh.a; then
++  elif test -f $OCI8_DIR/$OCI8_LIB_DIR/oci.a; then
+     if test -f $OCI8_DIR/$OCI8_LIB_DIR/libcore4.a; then
+       OCI8_ORACLE_VERSION=8.0
+     else
+       OCI8_ORACLE_VERSION=8.1
+     fi
+   else
+-    AC_MSG_ERROR(Oracle libclntsh.$SHLIB_SUFFIX_NAME client library not found)
++    AC_MSG_ERROR(Oracle oci.$SHLIB_OCI_SUFFIX client library not found)
+   fi
+   AC_MSG_RESULT($OCI8_ORACLE_VERSION)
+ ])
+@@ -333,7 +340,7 @@
+ 	;;
+     esac
+ 
+-    PHP_ADD_LIBRARY(clntsh, 1, OCI8_SHARED_LIBADD)
++    PHP_ADD_LIBRARY(oci, 1, OCI8_SHARED_LIBADD)
+     PHP_ADD_LIBPATH($OCI8_DIR/$OCI8_LIB_DIR, OCI8_SHARED_LIBADD)
+     PHP_NEW_EXTENSION(oci8, oci8.c oci8_lob.c oci8_statement.c oci8_collection.c oci8_interface.c oci8_failover.c, $ext_shared)
+     AC_DEFINE(HAVE_OCI8,1,[Defined to 1 if the PHP OCI8 extension for Oracle Database is configured])
+@@ -359,7 +366,7 @@
+       dnl user must pass in the library directory.  But on Linux we default
+       dnl to the most recent version in /usr/lib which is where the Oracle
+       dnl Instant Client RPM gets installed.
+-      PHP_OCI8_INSTANT_CLIENT=`ls -d /usr/lib/oracle/*/client${PHP_OCI8_IC_LIBDIR_SUFFIX}/lib/libclntsh.* 2> /dev/null | $PHP_OCI8_TAIL1 | $PHP_OCI8_SED -e 's#/libclntsh[^/]*##'`
++      PHP_OCI8_INSTANT_CLIENT=`ls --color=never -d /usr/lib/oracle/*/client${PHP_OCI8_IC_LIBDIR_SUFFIX}/lib/oci.* 2> /dev/null | $PHP_OCI8_TAIL1 | $PHP_OCI8_SED -e 's#/oci[^/]*##'`
+       if test -z "$PHP_OCI8_INSTANT_CLIENT"; then
+ 	AC_MSG_ERROR([Oracle Instant Client directory /usr/lib/oracle/.../client${PHP_OCI8_IC_LIBDIR_SUFFIX}/lib libraries not found. Try --with-oci8=instantclient,DIR])
+       fi
+@@ -401,7 +408,7 @@
+     fi
+ 
+     AC_OCI8IC_VERSION($PHP_OCI8_INSTANT_CLIENT)
+-    PHP_ADD_LIBRARY(clntsh, 1, OCI8_SHARED_LIBADD)
++    PHP_ADD_LIBRARY(oci, 1, OCI8_SHARED_LIBADD)
+     PHP_ADD_LIBPATH($PHP_OCI8_INSTANT_CLIENT, OCI8_SHARED_LIBADD)
+ 
+     AC_DEFINE(HAVE_OCI_INSTANT_CLIENT,1,[Defined to 1 if OCI8 configuration located Oracle's Instant Client libraries])

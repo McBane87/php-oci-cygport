@@ -1,0 +1,191 @@
+--- origsrc/php-7.3.3/Zend/Zend.m4	2019-03-29 15:27:29.666992100 -0400
++++ src/php-7.3.3/Zend/Zend.m4	2019-03-29 15:39:25.297851500 -0400
+@@ -109,6 +109,7 @@ AC_MSG_CHECKING(whether double cast to l
+ 
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <limits.h>
++#include <stdlib.h>
+ 
+ int main()
+ {
+@@ -221,6 +222,7 @@ AC_MSG_CHECKING(for MM alignment and log
+ 
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <stdio.h>
++#include <stdlib.h>
+ 
+ typedef union _mm_align_test {
+   void *ptr;
+@@ -318,6 +320,7 @@ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <sys/mman.h>
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <unistd.h>
+ #ifndef MAP_ANON
+ # ifdef MAP_ANONYMOUS
+ #  define MAP_ANON MAP_ANONYMOUS
+--- origsrc/php-7.3.3/Zend/acinclude.m4	2019-03-05 08:50:48.000000000 -0500
++++ src/php-7.3.3/Zend/acinclude.m4	2019-03-29 15:39:25.313476500 -0400
+@@ -63,7 +63,11 @@ dnl Check for broken sprintf()
+ dnl
+ AC_DEFUN([AC_ZEND_BROKEN_SPRINTF],[
+   AC_CACHE_CHECK(whether sprintf is broken, ac_cv_broken_sprintf,[
+-    AC_RUN_IFELSE([AC_LANG_SOURCE([[main() {char buf[20];exit(sprintf(buf,"testing 123")!=11); }]])],[
++    AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdio.h>
++#include <stdlib.h>
++main() { char buf[20];exit(sprintf(buf,"testing 123")!=11); }
++    ]])],[
+       ac_cv_broken_sprintf=no
+     ],[
+       ac_cv_broken_sprintf=yes
+--- origsrc/php-7.3.3/acinclude.m4	2019-03-29 15:27:27.620117100 -0400
++++ src/php-7.3.3/acinclude.m4	2019-03-29 15:39:25.313476500 -0400
+@@ -1212,6 +1212,7 @@ AC_DEFUN([PHP_DOES_PWRITE_WORK],[
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <errno.h>
+ $1
+@@ -1242,6 +1243,7 @@ AC_DEFUN([PHP_DOES_PREAD_WORK],[
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
++#include <stdlib.h>
+ #include <unistd.h>
+ #include <errno.h>
+ $1
+@@ -1353,6 +1355,7 @@ AC_DEFUN([PHP_READDIR_R_TYPE],[
+ #define _REENTRANT
+ #include <sys/types.h>
+ #include <dirent.h>
++#include <stdlib.h>
+ 
+ #ifndef PATH_MAX
+ #define PATH_MAX 1024
+@@ -1476,7 +1479,11 @@ dnl Check for broken sprintf(), C99 conf
+ dnl
+ AC_DEFUN([PHP_AC_BROKEN_SPRINTF],[
+   AC_CACHE_CHECK(whether sprintf is broken, ac_cv_broken_sprintf,[
+-    AC_RUN_IFELSE([AC_LANG_SOURCE([[main() {char buf[20];exit(sprintf(buf,"testing 123")!=11); }]])],[
++    AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdio.h>
++#include <string.h>
++main() {char buf[20];exit(sprintf(buf,"testing 123")!=11); }
++    ]])],[
+       ac_cv_broken_sprintf=no
+     ],[
+       ac_cv_broken_sprintf=yes
+@@ -1699,6 +1706,8 @@ AC_DEFUN([PHP_BROKEN_GLIBC_FOPEN_APPEND]
+   AC_CACHE_VAL(_cv_have_broken_glibc_fopen_append,[
+   AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
+ int main(int argc, char *argv[])
+ {
+   FILE *fp;
+@@ -1802,6 +1811,7 @@ dnl even newer glibcs have a different s
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #define _GNU_SOURCE
+ #include <stdio.h>
++#include <stdlib.h>
+ 
+ struct cookiedata {
+   __off64_t pos;
+@@ -2684,6 +2694,7 @@ uname -a:   `uname -a`
+ 
+ X
+     cat >conftest.$ac_ext <<X
++#include <stdlib.h>
+ main()
+ {
+   exit(0);
+--- origsrc/php-7.3.3/configure.ac	2019-03-29 15:27:29.666992100 -0400
++++ src/php-7.3.3/configure.ac	2019-03-29 15:39:25.329101500 -0400
+@@ -717,6 +717,8 @@ AC_CACHE_CHECK([for getaddrinfo], ac_cv_
+ [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <netdb.h>]],
+   [[struct addrinfo *g,h;g=&h;getaddrinfo("","",g,&g);]])],[AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <netdb.h>
++#include <stdlib.h>
++#include <string.h>
+ #include <sys/types.h>
+ #ifndef AF_INET
+ # include <sys/socket.h>
+--- origsrc/php-7.3.3/ext/iconv/config.m4	2019-03-05 08:50:42.000000000 -0500
++++ src/php-7.3.3/ext/iconv/config.m4	2019-03-29 15:39:25.329101500 -0400
+@@ -49,6 +49,7 @@ if test "$PHP_ICONV" != "no"; then
+       LDFLAGS="-liconv $LDFLAGS"
+       AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <$PHP_ICONV_H_PATH>
++#include <stdio.h>
+ int main() {
+   printf("%d", _libiconv_version);
+   return 0;
+--- origsrc/php-7.3.3/ext/standard/config.m4	2019-03-05 08:50:45.000000000 -0500
++++ src/php-7.3.3/ext/standard/config.m4	2019-03-29 15:39:25.344726500 -0400
+@@ -7,6 +7,8 @@ AC_CACHE_CHECK([whether flush should be
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
+ 
+ int main(int argc, char **argv)
+ {
+@@ -61,6 +63,8 @@ fi
+ 
+ AC_CACHE_CHECK(for standard DES crypt, ac_cv_crypt_des,[
+   AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+@@ -86,6 +90,8 @@ int main() {
+ 
+ AC_CACHE_CHECK(for extended DES crypt, ac_cv_crypt_ext_des,[
+   AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+@@ -111,6 +117,8 @@ int main() {
+ 
+ AC_CACHE_CHECK(for MD5 crypt, ac_cv_crypt_md5,[
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+@@ -146,6 +154,8 @@ int main() {
+ 
+ AC_CACHE_CHECK(for Blowfish crypt, ac_cv_crypt_blowfish,[
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+@@ -178,6 +188,8 @@ int main() {
+ 
+ AC_CACHE_CHECK(for SHA512 crypt, ac_cv_crypt_sha512,[
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
+@@ -209,6 +221,8 @@ int main() {
+ 
+ AC_CACHE_CHECK(for SHA256 crypt, ac_cv_crypt_sha256,[
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h>
++#include <string.h>
+ #if HAVE_UNISTD_H
+ #include <unistd.h>
+ #endif
